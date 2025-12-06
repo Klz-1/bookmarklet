@@ -17,6 +17,25 @@ export interface PageVisit {
 }
 
 /**
+ * Twitter bookmark scraped from bookmarks page
+ */
+export interface TwitterBookmark {
+  id?: number
+  tweetId: string
+  authorHandle: string
+  authorName: string
+  authorAvatar: string
+  content: string
+  timestamp: string
+  tweetUrl: string
+  mediaUrls: string[]
+  likes?: string
+  retweets?: string
+  replies?: string
+  scrapedAt: Date
+}
+
+/**
  * Aggregated statistics for a time period
  */
 export interface DailyStats {
@@ -33,6 +52,7 @@ export interface DailyStats {
  */
 class BrowsingDatabase extends Dexie {
   visits!: Table<PageVisit, number>
+  twitterBookmarks!: Table<TwitterBookmark, number>
 
   constructor() {
     super('BrowsingTrackerDB')
@@ -40,6 +60,12 @@ class BrowsingDatabase extends Dexie {
     // Schema version 1
     this.version(1).stores({
       visits: '++id, url, normalizedUrl, domain, visitedAt, sessionId, isBookmarked',
+    })
+
+    // Schema version 2 - add Twitter bookmarks
+    this.version(2).stores({
+      visits: '++id, url, normalizedUrl, domain, visitedAt, sessionId, isBookmarked',
+      twitterBookmarks: '++id, tweetId, authorHandle, timestamp, scrapedAt',
     })
   }
 
@@ -265,6 +291,81 @@ class BrowsingDatabase extends Dexie {
     return excludedDomains.some(
       (excluded) => domain === excluded || domain.endsWith(`.${excluded}`)
     )
+  }
+
+  // Twitter Bookmarks Methods
+
+  /**
+   * Add Twitter bookmarks (skips duplicates based on tweetId)
+   */
+  async addTwitterBookmarks(
+    tweets: Omit<TwitterBookmark, 'id' | 'scrapedAt'>[]
+  ): Promise<number> {
+    let addedCount = 0
+
+    for (const tweet of tweets) {
+      // Check if tweet already exists
+      const existing = await this.twitterBookmarks
+        .where('tweetId')
+        .equals(tweet.tweetId)
+        .first()
+
+      if (!existing) {
+        await this.twitterBookmarks.add({
+          ...tweet,
+          scrapedAt: new Date(),
+        })
+        addedCount++
+      }
+    }
+
+    return addedCount
+  }
+
+  /**
+   * Get all Twitter bookmarks, ordered by most recent first
+   */
+  async getTwitterBookmarks(limit?: number): Promise<TwitterBookmark[]> {
+    let query = this.twitterBookmarks.orderBy('scrapedAt').reverse()
+    if (limit) {
+      query = query.limit(limit)
+    }
+    return query.toArray()
+  }
+
+  /**
+   * Get Twitter bookmarks count
+   */
+  async getTwitterBookmarksCount(): Promise<number> {
+    return this.twitterBookmarks.count()
+  }
+
+  /**
+   * Search Twitter bookmarks by content or author
+   */
+  async searchTwitterBookmarks(searchTerm: string): Promise<TwitterBookmark[]> {
+    const term = searchTerm.toLowerCase()
+    const all = await this.twitterBookmarks.toArray()
+    return all.filter(
+      (t) =>
+        t.content.toLowerCase().includes(term) ||
+        t.authorHandle.toLowerCase().includes(term) ||
+        t.authorName.toLowerCase().includes(term)
+    )
+  }
+
+  /**
+   * Delete a Twitter bookmark by ID
+   */
+  async deleteTwitterBookmark(id: number): Promise<void> {
+    await this.twitterBookmarks.delete(id)
+  }
+
+  /**
+   * Clear all Twitter bookmarks
+   */
+  async clearTwitterBookmarks(): Promise<void> {
+    await this.twitterBookmarks.clear()
   }
 }
 

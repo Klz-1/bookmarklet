@@ -167,7 +167,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   }
 })
 
-// Listen for messages from popup/dashboard
+// Listen for messages from popup/dashboard/content scripts
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'TRACKING_STATE_CHANGED') {
     isTracking = message.isTracking
@@ -176,10 +176,18 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       updateCurrentVisitDuration()
     }
     console.log(`[BrowsingTracker] Tracking ${isTracking ? 'enabled' : 'disabled'}`)
+    sendResponse({ success: true })
+  } else if (message.type === 'TWITTER_BOOKMARKS_SCRAPED') {
+    // Handle Twitter bookmarks from content script
+    db.addTwitterBookmarks(message.tweets).then((count) => {
+      console.log(`[BrowsingTracker] Added ${count} new Twitter bookmarks`)
+      sendResponse({ success: true, added: count })
+    })
+    return true // Keep channel open for async response
+  } else {
+    sendResponse({ success: true })
   }
 
-  // Always return true for async responses
-  sendResponse({ success: true })
   return true
 })
 

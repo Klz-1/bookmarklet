@@ -30,5 +30,12 @@
     "32": "public/icons/icon-32.png",
     "48": "public/icons/icon-48.png",
     "128": "public/icons/icon-128.png"
-  }
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://twitter.com/i/bookmarks*", "https://x.com/i/bookmarks*"],
+      "js": ["src/content/twitter-bookmarks.ts"],
+      "run_at": "document_idle"
+    }
+  ]
 }

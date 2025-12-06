@@ -37,6 +37,25 @@ export interface DailyStats {
 }
 
 /**
+ * Twitter bookmark scraped from bookmarks page
+ */
+export interface TwitterBookmark {
+  id?: number
+  tweetId: string
+  authorHandle: string
+  authorName: string
+  authorAvatar: string
+  content: string
+  timestamp: string
+  tweetUrl: string
+  mediaUrls: string[]
+  likes?: string
+  retweets?: string
+  replies?: string
+  scrapedAt: Date
+}
+
+/**
  * Message types for communication between extension components
  */
 export type ExtensionMessage =
@@ -44,6 +63,7 @@ export type ExtensionMessage =
   | { type: 'PAGE_VISITED'; visit: PageVisit }
   | { type: 'GET_STATS'; date: string }
   | { type: 'STATS_RESPONSE'; stats: DailyStats }
+  | { type: 'TWITTER_BOOKMARKS_SCRAPED'; tweets: Omit<TwitterBookmark, 'id' | 'scrapedAt'>[] }
 
 /**
  * Default settings
