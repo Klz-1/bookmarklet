@@ -1,0 +1,1 @@
+I want to create a simple chrome extension, that lets me capture all of my browsing history and save links of the pages I have browsed and capture metadata of how much time I spent, did i share it, did i bookmark it or did I engage with it in any way and then visualize my history with meaningful statistics. 
