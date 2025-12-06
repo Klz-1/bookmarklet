@@ -1,0 +1,17 @@
+{
+  "version": "1.0.0",
+  "project": {
+    "name": "bookmarklet",
+    "created_at": "2025-12-06T10:49:09+00:00",
+    "prd_path": null,
+    "isolated_mode": true,
+    "git_repo": "https://github.com/Klz-1/bookmarklet.git"
+  },
+  "workflow": {
+    "current_state": "UNINITIALIZED",
+    "current_phase": 0,
+    "total_phases": 0
+  },
+  "phases": [],
+  "errors": []
+}
