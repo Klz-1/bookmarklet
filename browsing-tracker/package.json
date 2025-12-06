@@ -1,7 +1,8 @@
 {
-  "name": "browsing-tracker",
+  "name": "browsing-history-tracker",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "A privacy-first Chrome extension that tracks your browsing habits and provides meaningful insights",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,9 +10,11 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "zip": "cd dist && zip -r ../browsing-tracker.zip ."
   },
   "dependencies": {
+    "chart.js": "^4.5.1",
     "dexie": "^4.2.1",
     "preact": "^10.27.2"
   },
@@ -31,5 +34,7 @@
     "typescript": "~5.9.3",
     "vite": "^7.2.4",
     "vitest": "^4.0.15"
-  }
+  },
+  "author": "",
+  "license": "MIT"
 }

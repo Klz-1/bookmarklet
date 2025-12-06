@@ -1,11 +1,18 @@
 import { useState, useEffect } from 'preact/hooks'
 import { db, type PageVisit, type DailyStats } from '../storage/db'
+import { DomainChart } from './charts/DomainChart'
+import { ActivityHeatmap } from './charts/ActivityHeatmap'
+import { useDarkMode } from '../shared/useDarkMode'
 
 export function Dashboard() {
+  // Initialize dark mode
+  useDarkMode()
   const [stats, setStats] = useState<DailyStats | null>(null)
   const [recentVisits, setRecentVisits] = useState<PageVisit[]>([])
-  const [dateRange, setDateRange] = useState<'today' | 'week' | 'month'>('today')
+  const [allVisits, setAllVisits] = useState<PageVisit[]>([])
+  const [dateRange, setDateRange] = useState<'today' | 'week' | 'month'>('week')
   const [loading, setLoading] = useState(true)
+  const [exportFormat, setExportFormat] = useState<'json' | 'csv'>('json')
 
   useEffect(() => {
     loadData()
@@ -20,9 +27,13 @@ export function Dashboard() {
       const dailyStats = await db.getStatsForRange(startDate, endDate)
       setStats(dailyStats)
 
+      // Load visits for the date range (for heatmap)
+      const visits = await db.getVisitsForRange(startDate, endDate)
+      setAllVisits(visits)
+
       // Load recent visits
-      const visits = await db.getRecentVisits(50)
-      setRecentVisits(visits)
+      const recent = await db.getRecentVisits(50)
+      setRecentVisits(recent)
     } catch (error) {
       console.error('Failed to load data:', error)
     } finally {
@@ -69,16 +80,42 @@ export function Dashboard() {
   async function handleExport() {
     try {
       const data = await db.exportData()
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `browsing-history-${new Date().toISOString().split('T')[0]}.json`
-      a.click()
-      URL.revokeObjectURL(url)
+
+      if (exportFormat === 'json') {
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+        downloadBlob(blob, `browsing-history-${new Date().toISOString().split('T')[0]}.json`)
+      } else {
+        // CSV export
+        const headers = ['URL', 'Title', 'Domain', 'Duration (s)', 'Visited At', 'Bookmarked']
+        const rows = data.visits.map((v) => [
+          v.url,
+          v.title.replace(/"/g, '""'),
+          v.domain,
+          v.duration,
+          new Date(v.visitedAt).toISOString(),
+          v.isBookmarked ? 'Yes' : 'No',
+        ])
+
+        const csv = [
+          headers.join(','),
+          ...rows.map((row) => row.map((cell) => `"${cell}"`).join(',')),
+        ].join('\n')
+
+        const blob = new Blob([csv], { type: 'text/csv' })
+        downloadBlob(blob, `browsing-history-${new Date().toISOString().split('T')[0]}.csv`)
+      }
     } catch (error) {
       console.error('Export failed:', error)
     }
+  }
+
+  function downloadBlob(blob: Blob, filename: string) {
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   if (loading) {
@@ -96,12 +133,22 @@ export function Dashboard() {
         <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold">Browsing Tracker</h1>
-            <button
-              onClick={handleExport}
-              className="px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
-            >
-              Export Data
-            </button>
+            <div className="flex items-center gap-2">
+              <select
+                value={exportFormat}
+                onChange={(e) => setExportFormat((e.target as HTMLSelectElement).value as 'json' | 'csv')}
+                className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700"
+              >
+                <option value="json">JSON</option>
+                <option value="csv">CSV</option>
+              </select>
+              <button
+                onClick={handleExport}
+                className="px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
+              >
+                Export
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -149,7 +196,28 @@ export function Dashboard() {
           </div>
         </div>
 
-        {/* Top Domains */}
+        {/* Charts Row */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          {/* Domain Doughnut Chart */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm">
+            <h2 className="text-lg font-semibold mb-4">Time by Domain</h2>
+            <DomainChart
+              data={stats?.topDomains ?? []}
+              formatDuration={formatDuration}
+            />
+          </div>
+
+          {/* Activity Heatmap */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm">
+            <h2 className="text-lg font-semibold mb-4">Activity Patterns</h2>
+            <ActivityHeatmap
+              visits={allVisits}
+              formatDuration={formatDuration}
+            />
+          </div>
+        </div>
+
+        {/* Top Domains List */}
         {stats && stats.topDomains.length > 0 && (
           <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm mb-8">
             <h2 className="text-lg font-semibold mb-4">Top Sites by Time</h2>
@@ -160,13 +228,14 @@ export function Dashboard() {
                   <div className="flex-1 ml-2">
                     <div className="flex justify-between items-center mb-1">
                       <span className="font-medium">{domain.domain}</span>
-                      <span className="text-gray-500 dark:text-gray-400">
-                        {formatDuration(domain.time)}
-                      </span>
+                      <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
+                        <span>{domain.visits} visits</span>
+                        <span>{formatDuration(domain.time)}</span>
+                      </div>
                     </div>
                     <div className="h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-blue-500 rounded-full"
+                        className="h-full bg-blue-500 rounded-full transition-all"
                         style={{
                           width: `${(domain.time / stats.topDomains[0].time) * 100}%`,
                         }}
@@ -205,13 +274,20 @@ export function Dashboard() {
                       {visit.domain}
                     </p>
                   </div>
-                  <div className="ml-4 text-right">
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                      {formatDuration(visit.duration)}
-                    </p>
-                    <p className="text-xs text-gray-400 dark:text-gray-500">
-                      {formatDate(visit.visitedAt)}
-                    </p>
+                  <div className="ml-4 text-right flex items-center gap-2">
+                    {visit.isBookmarked && (
+                      <svg className="w-4 h-4 text-yellow-500" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                      </svg>
+                    )}
+                    <div>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        {formatDuration(visit.duration)}
+                      </p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500">
+                        {formatDate(visit.visitedAt)}
+                      </p>
+                    </div>
                   </div>
                 </div>
               ))}
