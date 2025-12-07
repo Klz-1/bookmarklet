@@ -243,6 +243,13 @@ chrome.runtime.onStartup.addListener(async () => {
   await initialize()
 })
 
+// Listen for keyboard shortcut commands
+chrome.commands.onCommand.addListener((command) => {
+  if (command === 'open_dashboard') {
+    chrome.tabs.create({ url: chrome.runtime.getURL('src/newtab/index.html') })
+  }
+})
+
 // Listen for storage changes to update sync alarm
 chrome.storage.onChanged.addListener(async (changes, areaName) => {
   if (areaName === 'local' && changes.syncConfig) {

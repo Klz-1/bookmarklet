@@ -7,6 +7,7 @@ import { SearchBar } from './components/SearchBar'
 import { QuickLinks } from './components/QuickLinks'
 import { TodayStats } from './components/TodayStats'
 import { RecentBookmarks } from './components/RecentBookmarks'
+import { OneboxWidget } from './components/OneboxWidget'
 
 export interface WidgetConfig {
   id: string
@@ -20,6 +21,7 @@ const DEFAULT_WIDGETS: WidgetConfig[] = [
   { id: 'quicklinks', visible: true, position: 2 },
   { id: 'stats', visible: true, position: 3 },
   { id: 'bookmarks', visible: true, position: 4 },
+  { id: 'onebox', visible: true, position: 5 },
 ]
 
 export function NewTabPage() {
@@ -151,6 +153,13 @@ export function NewTabPage() {
             {isVisible('stats') && <TodayStats />}
             {isVisible('bookmarks') && <RecentBookmarks />}
           </div>
+
+          {/* Onebox Widget */}
+          {isVisible('onebox') && (
+            <div className="w-full mt-4">
+              <OneboxWidget />
+            </div>
+          )}
         </div>
 
         {/* Sync Settings Modal */}

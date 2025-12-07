@@ -1,5 +1,7 @@
 /**
  * Authentication service using chrome.identity API
+ * Supports both getAuthToken (Chrome with signed-in user) and
+ * launchWebAuthFlow (any Chromium browser)
  */
 
 export interface UserInfo {
@@ -16,18 +18,76 @@ export interface AuthState {
 }
 
 const AUTH_STORAGE_KEY = 'authState'
+// Web application client (for launchWebAuthFlow - works in all browsers)
+const OAUTH_CLIENT_ID_WEB = '655545319264-psjagdc0o0cjkdksmrja4mbeoscm0oqs.apps.googleusercontent.com'
+const OAUTH_SCOPES = ['openid', 'email', 'profile']
 
 /**
- * Get OAuth token using chrome.identity
+ * Get OAuth token using chrome.identity.getAuthToken (requires browser sign-in)
  */
-export async function getAuthToken(interactive: boolean = true): Promise<string | null> {
+async function getAuthTokenDirect(interactive: boolean): Promise<string | null> {
   try {
+    if (!chrome.identity?.getAuthToken) {
+      return null
+    }
     const token = await chrome.identity.getAuthToken({ interactive })
     return token?.token || null
   } catch (error) {
-    console.error('[Auth] Failed to get token:', error)
+    // This method doesn't work if user isn't signed into browser
     return null
   }
+}
+
+/**
+ * Get OAuth token using launchWebAuthFlow (works in any Chromium browser)
+ */
+async function getAuthTokenViaWebFlow(): Promise<string | null> {
+  try {
+    const redirectUrl = chrome.identity.getRedirectURL()
+
+    const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth')
+    authUrl.searchParams.set('client_id', OAUTH_CLIENT_ID_WEB)
+    authUrl.searchParams.set('redirect_uri', redirectUrl)
+    authUrl.searchParams.set('response_type', 'token')
+    authUrl.searchParams.set('scope', OAUTH_SCOPES.join(' '))
+    authUrl.searchParams.set('prompt', 'consent')
+
+    const responseUrl = await chrome.identity.launchWebAuthFlow({
+      url: authUrl.toString(),
+      interactive: true,
+    })
+
+    if (!responseUrl) {
+      return null
+    }
+
+    // Parse token from URL fragment (e.g., #access_token=xxx&token_type=Bearer...)
+    const hashParams = new URLSearchParams(responseUrl.split('#')[1])
+    const token = hashParams.get('access_token')
+
+    return token
+  } catch (error) {
+    console.error('[Auth] Web auth flow failed:', error)
+    return null
+  }
+}
+
+/**
+ * Get OAuth token - tries direct method first, falls back to web flow
+ */
+export async function getAuthToken(interactive: boolean = true): Promise<string | null> {
+  // First try the direct method (works if user is signed into browser)
+  const directToken = await getAuthTokenDirect(interactive)
+  if (directToken) {
+    return directToken
+  }
+
+  // Fall back to web auth flow (opens popup, works everywhere)
+  if (interactive) {
+    return getAuthTokenViaWebFlow()
+  }
+
+  return null
 }
 
 /**
@@ -89,15 +149,20 @@ export async function signIn(): Promise<AuthState> {
  */
 export async function signOut(): Promise<void> {
   try {
-    // Get current token to revoke
-    const token = await getAuthToken(false)
+    // Get stored token to revoke
+    const result = await chrome.storage.local.get(AUTH_STORAGE_KEY)
+    const storedState = result[AUTH_STORAGE_KEY] as AuthState | undefined
 
-    if (token) {
-      // Revoke the token
-      await chrome.identity.removeCachedAuthToken({ token })
+    if (storedState?.token) {
+      // Try to remove cached token (may not work for web flow tokens)
+      try {
+        await chrome.identity.removeCachedAuthToken({ token: storedState.token })
+      } catch {
+        // Ignore - token may have been obtained via web flow
+      }
 
-      // Also revoke on Google's side
-      await fetch(`https://accounts.google.com/o/oauth2/revoke?token=${token}`)
+      // Revoke on Google's side
+      await fetch(`https://accounts.google.com/o/oauth2/revoke?token=${storedState.token}`)
     }
   } catch (error) {
     console.error('[Auth] Error during sign out:', error)
@@ -111,19 +176,23 @@ export async function signOut(): Promise<void> {
  * Get stored auth state
  */
 export async function getStoredAuthState(): Promise<AuthState> {
-  const result = await chrome.storage.local.get(AUTH_STORAGE_KEY)
+  try {
+    const result = await chrome.storage.local.get(AUTH_STORAGE_KEY)
 
-  if (result[AUTH_STORAGE_KEY]) {
-    // Verify token is still valid
-    const storedState = result[AUTH_STORAGE_KEY] as AuthState
+    if (result[AUTH_STORAGE_KEY]) {
+      const storedState = result[AUTH_STORAGE_KEY] as AuthState
 
-    if (storedState.token) {
-      const user = await fetchUserInfo(storedState.token)
+      if (storedState.token) {
+        // Verify token is still valid
+        const user = await fetchUserInfo(storedState.token)
 
-      if (user) {
-        return storedState
+        if (user) {
+          return storedState
+        }
       }
     }
+  } catch (error) {
+    // Silently fail - user just won't be logged in
   }
 
   return { isAuthenticated: false, user: null, token: null }
@@ -133,12 +202,17 @@ export async function getStoredAuthState(): Promise<AuthState> {
  * Refresh token if needed
  */
 export async function refreshToken(): Promise<string | null> {
-  // Remove cached token first
-  const oldToken = await getAuthToken(false)
+  // For web flow tokens, we need to re-authenticate
+  // Try direct token refresh first
+  const oldToken = await getAuthTokenDirect(false)
   if (oldToken) {
-    await chrome.identity.removeCachedAuthToken({ token: oldToken })
+    try {
+      await chrome.identity.removeCachedAuthToken({ token: oldToken })
+    } catch {
+      // Ignore
+    }
   }
 
-  // Get fresh token (non-interactive)
-  return getAuthToken(false)
+  // Get fresh token (non-interactive won't work for web flow)
+  return getAuthTokenDirect(false)
 }

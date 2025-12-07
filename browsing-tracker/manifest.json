@@ -46,5 +46,14 @@
       "js": ["src/content/twitter-bookmarks.ts"],
       "run_at": "document_idle"
     }
-  ]
+  ],
+  "commands": {
+    "open_dashboard": {
+      "suggested_key": {
+        "default": "Alt+Shift+D",
+        "mac": "Alt+Shift+D"
+      },
+      "description": "Open Dashboard (New Tab page)"
+    }
+  }
 }
