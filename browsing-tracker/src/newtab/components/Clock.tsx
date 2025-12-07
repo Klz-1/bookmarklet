@@ -16,7 +16,7 @@ export function Clock() {
   }
 
   function formatTime(): string {
-    return time.toLocaleTimeString('en-US', {
+    return time.toLocaleTimeString(undefined, {
       hour: 'numeric',
       minute: '2-digit',
       hour12: true,
@@ -24,7 +24,7 @@ export function Clock() {
   }
 
   function formatDate(): string {
-    return time.toLocaleDateString('en-US', {
+    return time.toLocaleDateString(undefined, {
       weekday: 'long',
       month: 'long',
       day: 'numeric',

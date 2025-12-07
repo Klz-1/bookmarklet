@@ -97,19 +97,6 @@ export const DEFAULT_SYNC_CONFIG: SyncConfig = {
 }
 
 /**
- * Sync queue item
- */
-export interface SyncQueueItem {
-  id?: number
-  type: 'visit' | 'twitter_bookmark'
-  data: Record<string, unknown>
-  createdAt: Date
-  attempts: number
-  lastAttemptAt?: Date
-  error?: string
-}
-
-/**
  * Sync status
  */
 export interface SyncStatus {

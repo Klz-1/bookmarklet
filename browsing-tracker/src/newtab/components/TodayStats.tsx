@@ -6,20 +6,23 @@ export function TodayStats() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    loadStats()
-  }, [])
+    let isMounted = true
 
-  async function loadStats() {
-    try {
-      const today = new Date().toISOString().split('T')[0]
-      const dailyStats = await db.getDailyStats(today)
-      setStats(dailyStats)
-    } catch (error) {
-      console.error('Failed to load stats:', error)
-    } finally {
-      setLoading(false)
+    async function loadStats() {
+      try {
+        const today = new Date().toISOString().split('T')[0]
+        const dailyStats = await db.getDailyStats(today)
+        if (isMounted) setStats(dailyStats)
+      } catch (error) {
+        console.error('Failed to load stats:', error)
+      } finally {
+        if (isMounted) setLoading(false)
+      }
     }
-  }
+
+    loadStats()
+    return () => { isMounted = false }
+  }, [])
 
   function formatDuration(seconds: number): string {
     if (seconds < 60) return `${seconds}s`

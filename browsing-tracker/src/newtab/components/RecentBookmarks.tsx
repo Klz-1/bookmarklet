@@ -6,29 +6,35 @@ export function RecentBookmarks() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    let isMounted = true
+
+    async function loadBookmarks() {
+      try {
+        const recent = await db.getTwitterBookmarks(5)
+        if (isMounted) setBookmarks(recent)
+      } catch (error) {
+        console.error('Failed to load bookmarks:', error)
+      } finally {
+        if (isMounted) setLoading(false)
+      }
+    }
+
     loadBookmarks()
+    return () => { isMounted = false }
   }, [])
 
-  async function loadBookmarks() {
-    try {
-      const recent = await db.getTwitterBookmarks(5)
-      setBookmarks(recent)
-    } catch (error) {
-      console.error('Failed to load bookmarks:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
   function formatDate(date: Date): string {
+    const d = new Date(date)
+    if (isNaN(d.getTime())) return 'Unknown'
+
     const now = new Date()
-    const diff = now.getTime() - new Date(date).getTime()
+    const diff = now.getTime() - d.getTime()
     const days = Math.floor(diff / (1000 * 60 * 60 * 24))
 
     if (days === 0) return 'Today'
     if (days === 1) return 'Yesterday'
     if (days < 7) return `${days}d ago`
-    return new Date(date).toLocaleDateString()
+    return d.toLocaleDateString()
   }
 
   function truncate(text: string, max: number): string {

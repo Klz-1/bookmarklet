@@ -4,7 +4,7 @@
 
 import { db, type PageVisit, type TwitterBookmark } from '../storage/db'
 import { type SyncConfig, DEFAULT_SYNC_CONFIG } from '../shared/types'
-import { getStoredAuthState } from '../auth/authService'
+import { getStoredAuthState, refreshToken } from '../auth/authService'
 
 const SYNC_CONFIG_KEY = 'syncConfig'
 
@@ -70,7 +70,7 @@ function formatBookmarkForSync(bookmark: TwitterBookmark) {
 /**
  * Sync items to OneSpace
  */
-export async function syncToOneSpace(): Promise<{
+export async function syncToOneSpace(retryOnAuth = true): Promise<{
   success: boolean
   synced: number
   errors: string[]
@@ -89,14 +89,17 @@ export async function syncToOneSpace(): Promise<{
   const errors: string[] = []
   let synced = 0
 
-  // Collect items to sync
+  // Collect items to sync - store references to mark the SAME items as synced later
   const items: Array<ReturnType<typeof formatVisitForSync> | ReturnType<typeof formatBookmarkForSync>> = []
+  const bookmarksToSync: TwitterBookmark[] = []
+  const visitsToSync: PageVisit[] = []
 
   // Get unsynced Twitter bookmarks
   if (config.autoSyncTwitter) {
     const bookmarks = await db.getUnsyncedTwitterBookmarks(50)
     for (const bookmark of bookmarks) {
       items.push(formatBookmarkForSync(bookmark))
+      bookmarksToSync.push(bookmark)
     }
   }
 
@@ -105,6 +108,7 @@ export async function syncToOneSpace(): Promise<{
     const visits = await db.getUnsyncedVisits(50)
     for (const visit of visits) {
       items.push(formatVisitForSync(visit))
+      visitsToSync.push(visit)
     }
   }
 
@@ -123,30 +127,34 @@ export async function syncToOneSpace(): Promise<{
       body: JSON.stringify({ items }),
     })
 
+    // Handle 401 - try to refresh token and retry once
+    if (response.status === 401 && retryOnAuth) {
+      console.log('[Sync] Token expired, attempting refresh...')
+      const newToken = await refreshToken()
+      if (newToken) {
+        return syncToOneSpace(false) // Retry with fresh token, but don't retry again
+      }
+      throw new Error('Authentication expired. Please sign in again.')
+    }
+
     if (!response.ok) {
       const errorText = await response.text()
-      throw new Error(`OneSpace API error: ${response.status} - ${errorText}`)
+      throw new Error(`Onebox API error: ${response.status} - ${errorText}`)
     }
 
     const result = await response.json()
     synced = result.synced || items.length
 
-    // Mark items as synced
-    if (config.autoSyncTwitter) {
-      const bookmarks = await db.getUnsyncedTwitterBookmarks(50)
-      for (const bookmark of bookmarks) {
-        if (bookmark.id) {
-          await db.markTwitterBookmarkSynced(bookmark.id)
-        }
+    // Mark the SAME items that were sent as synced (fixes race condition)
+    for (const bookmark of bookmarksToSync) {
+      if (bookmark.id) {
+        await db.markTwitterBookmarkSynced(bookmark.id)
       }
     }
 
-    if (config.autoSyncVisits) {
-      const visits = await db.getUnsyncedVisits(50)
-      for (const visit of visits) {
-        if (visit.id) {
-          await db.markVisitSynced(visit.id)
-        }
+    for (const visit of visitsToSync) {
+      if (visit.id) {
+        await db.markVisitSynced(visit.id)
       }
     }
 
@@ -221,6 +229,7 @@ export async function testOneboxConnection(): Promise<{
       return { success: false, message: `Connection failed: ${response.status}` }
     }
   } catch (error) {
-    return { success: false, message: `Connection error: ${error}` }
+    const msg = error instanceof Error ? error.message : 'Unknown error'
+    return { success: false, message: `Connection error: ${msg}` }
   }
 }

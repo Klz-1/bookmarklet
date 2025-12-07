@@ -1,4 +1,5 @@
 import { db } from '../storage/db'
+import { getSyncConfig, syncToOneSpace } from '../sync/syncService'
 
 // Session state
 let currentSessionId = generateSessionId()
@@ -32,6 +33,12 @@ async function initialize() {
 
   // Set up alarm for daily cleanup
   await chrome.alarms.create('dailyCleanup', { periodInMinutes: 60 * 24 })
+
+  // Set up alarm for periodic sync based on config
+  const syncConfig = await getSyncConfig()
+  if (syncConfig.enabled) {
+    await chrome.alarms.create('periodicSync', { periodInMinutes: syncConfig.syncIntervalMinutes })
+  }
 
   // Track the current active tab
   const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true })
@@ -164,6 +171,18 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     if (deletedCount > 0) {
       console.log(`[BrowsingTracker] Cleaned up ${deletedCount} old visits`)
     }
+  } else if (alarm.name === 'periodicSync') {
+    // Periodic sync to Onebox
+    const syncConfig = await getSyncConfig()
+    if (syncConfig.enabled) {
+      console.log('[BrowsingTracker] Running periodic sync...')
+      const result = await syncToOneSpace()
+      if (result.success && result.synced > 0) {
+        console.log(`[BrowsingTracker] Synced ${result.synced} items to Onebox`)
+      } else if (!result.success) {
+        console.error('[BrowsingTracker] Sync failed:', result.errors)
+      }
+    }
   }
 })
 
@@ -222,6 +241,20 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 chrome.runtime.onStartup.addListener(async () => {
   currentSessionId = generateSessionId()
   await initialize()
+})
+
+// Listen for storage changes to update sync alarm
+chrome.storage.onChanged.addListener(async (changes, areaName) => {
+  if (areaName === 'local' && changes.syncConfig) {
+    const newConfig = changes.syncConfig.newValue as { enabled?: boolean; syncIntervalMinutes?: number } | undefined
+    if (newConfig?.enabled && newConfig.syncIntervalMinutes) {
+      await chrome.alarms.create('periodicSync', { periodInMinutes: newConfig.syncIntervalMinutes })
+      console.log(`[BrowsingTracker] Sync alarm set for every ${newConfig.syncIntervalMinutes} minutes`)
+    } else {
+      await chrome.alarms.clear('periodicSync')
+      console.log('[BrowsingTracker] Sync alarm cleared')
+    }
+  }
 })
 
 // Also initialize immediately (for development)

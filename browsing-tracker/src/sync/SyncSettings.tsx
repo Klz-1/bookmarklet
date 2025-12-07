@@ -26,14 +26,27 @@ export function SyncSettings({ onClose }: SyncSettingsProps) {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   useEffect(() => {
-    loadConfig()
-    loadStatus()
+    let isMounted = true
+
+    async function load() {
+      const [cfg, s] = await Promise.all([getSyncConfig(), getSyncStatus()])
+      if (isMounted) {
+        setConfig(cfg)
+        setStatus({ pendingCount: s.pendingCount, lastSyncAt: s.lastSyncAt })
+      }
+    }
+
+    load()
+    return () => { isMounted = false }
   }, [])
 
-  async function loadConfig() {
-    const cfg = await getSyncConfig()
-    setConfig(cfg)
-  }
+  // Auto-clear message after 5 seconds
+  useEffect(() => {
+    if (message) {
+      const timer = setTimeout(() => setMessage(null), 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [message])
 
   async function loadStatus() {
     const s = await getSyncStatus()

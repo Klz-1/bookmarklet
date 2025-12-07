@@ -10,24 +10,27 @@ export function QuickLinks() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    loadTopSites()
-  }, [])
+    let isMounted = true
 
-  async function loadTopSites() {
-    try {
-      const topSites = await chrome.topSites.get()
-      setSites(topSites.slice(0, 8))
-    } catch (error) {
-      console.error('Failed to load top sites:', error)
-    } finally {
-      setLoading(false)
+    async function loadTopSites() {
+      try {
+        const topSites = await chrome.topSites.get()
+        if (isMounted) setSites(topSites.slice(0, 8))
+      } catch (error) {
+        console.error('Failed to load top sites:', error)
+      } finally {
+        if (isMounted) setLoading(false)
+      }
     }
-  }
+
+    loadTopSites()
+    return () => { isMounted = false }
+  }, [])
 
   function getFaviconUrl(url: string): string {
     try {
       const domain = new URL(url).hostname
-      return `https://www.google.com/s2/favicons?domain=${domain}&sz=32`
+      return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=32`
     } catch {
       return ''
     }

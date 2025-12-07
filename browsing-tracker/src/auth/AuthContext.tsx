@@ -13,8 +13,10 @@ interface AuthContextValue {
   isAuthenticated: boolean
   user: UserInfo | null
   loading: boolean
+  error: string | null
   signIn: () => Promise<void>
   signOut: () => Promise<void>
+  clearError: () => void
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -26,30 +28,39 @@ export function AuthProvider({ children }: { children: ComponentChildren }) {
     token: null,
   })
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // Load stored auth state on mount
-    loadAuthState()
-  }, [])
+    let isMounted = true
 
-  async function loadAuthState() {
-    try {
-      const state = await getStoredAuthState()
-      setAuthState(state)
-    } catch (error) {
-      console.error('[Auth] Failed to load auth state:', error)
-    } finally {
-      setLoading(false)
+    async function loadAuthState() {
+      try {
+        const state = await getStoredAuthState()
+        if (isMounted) setAuthState(state)
+      } catch (err) {
+        console.error('[Auth] Failed to load auth state:', err)
+        if (isMounted) setError('Failed to load authentication state')
+      } finally {
+        if (isMounted) setLoading(false)
+      }
     }
-  }
+
+    loadAuthState()
+    return () => { isMounted = false }
+  }, [])
 
   async function signIn() {
     setLoading(true)
+    setError(null)
     try {
       const state = await authSignIn()
       setAuthState(state)
-    } catch (error) {
-      console.error('[Auth] Sign in failed:', error)
+      if (!state.isAuthenticated) {
+        setError('Sign in was cancelled or failed')
+      }
+    } catch (err) {
+      console.error('[Auth] Sign in failed:', err)
+      setError(err instanceof Error ? err.message : 'Sign in failed')
     } finally {
       setLoading(false)
     }
@@ -57,14 +68,20 @@ export function AuthProvider({ children }: { children: ComponentChildren }) {
 
   async function signOut() {
     setLoading(true)
+    setError(null)
     try {
       await authSignOut()
       setAuthState({ isAuthenticated: false, user: null, token: null })
-    } catch (error) {
-      console.error('[Auth] Sign out failed:', error)
+    } catch (err) {
+      console.error('[Auth] Sign out failed:', err)
+      setError(err instanceof Error ? err.message : 'Sign out failed')
     } finally {
       setLoading(false)
     }
+  }
+
+  function clearError() {
+    setError(null)
   }
 
   return (
@@ -73,8 +90,10 @@ export function AuthProvider({ children }: { children: ComponentChildren }) {
         isAuthenticated: authState.isAuthenticated,
         user: authState.user,
         loading,
+        error,
         signIn,
         signOut,
+        clearError,
       }}
     >
       {children}

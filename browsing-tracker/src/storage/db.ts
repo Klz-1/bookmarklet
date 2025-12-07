@@ -266,7 +266,11 @@ class BrowsingDatabase extends Dexie {
    * Delete all data
    */
   async clearAllData(): Promise<void> {
-    await this.visits.clear()
+    await Promise.all([
+      this.visits.clear(),
+      this.twitterBookmarks.clear(),
+      this.syncQueue.clear(),
+    ])
   }
 
   /**

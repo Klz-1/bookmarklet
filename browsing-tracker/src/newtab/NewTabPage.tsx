@@ -30,15 +30,34 @@ export function NewTabPage() {
   useDarkMode()
 
   useEffect(() => {
+    let isMounted = true
+
+    async function loadWidgetConfig() {
+      try {
+        const result = await chrome.storage.local.get('widgetConfig')
+        if (isMounted && result.widgetConfig && Array.isArray(result.widgetConfig)) {
+          setWidgets(result.widgetConfig as WidgetConfig[])
+        }
+      } catch (error) {
+        console.error('[NewTab] Failed to load widget config:', error)
+      }
+    }
+
     loadWidgetConfig()
+    return () => { isMounted = false }
   }, [])
 
-  async function loadWidgetConfig() {
-    const result = await chrome.storage.local.get('widgetConfig')
-    if (result.widgetConfig && Array.isArray(result.widgetConfig)) {
-      setWidgets(result.widgetConfig as WidgetConfig[])
+  // Handle Escape key to close modals
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        if (showSyncSettings) setShowSyncSettings(false)
+        if (showSettings) setShowSettings(false)
+      }
     }
-  }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [showSettings, showSyncSettings])
 
   async function toggleWidget(id: string) {
     const updated = widgets.map(w =>

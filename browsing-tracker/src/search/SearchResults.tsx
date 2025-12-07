@@ -13,14 +13,17 @@ export function SearchResults({ results, isSearching, query, onClose }: SearchRe
   }
 
   function formatDate(date: Date): string {
+    const d = new Date(date)
+    if (isNaN(d.getTime())) return 'Unknown'
+
     const now = new Date()
-    const diff = now.getTime() - new Date(date).getTime()
+    const diff = now.getTime() - d.getTime()
     const days = Math.floor(diff / (1000 * 60 * 60 * 24))
 
     if (days === 0) return 'Today'
     if (days === 1) return 'Yesterday'
     if (days < 7) return `${days}d ago`
-    return new Date(date).toLocaleDateString()
+    return d.toLocaleDateString()
   }
 
   function truncate(text: string, max: number): string {
@@ -67,13 +70,13 @@ export function SearchResults({ results, isSearching, query, onClose }: SearchRe
                       alt=""
                       className="w-5 h-5 mt-1"
                       onError={(e) => {
-                        (e.target as HTMLImageElement).src = `https://www.google.com/s2/favicons?domain=${item.domain}&sz=32`
+                        (e.target as HTMLImageElement).src = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(item.domain)}&sz=32`
                       }}
                     />
                   ) : (
                     <div className="w-8 h-8 bg-gray-200 dark:bg-gray-600 rounded flex items-center justify-center">
                       <span className="text-xs text-gray-500 dark:text-gray-400">
-                        {item.domain.charAt(0).toUpperCase()}
+                        {item.domain?.charAt(0)?.toUpperCase() || '?'}
                       </span>
                     </div>
                   )}
