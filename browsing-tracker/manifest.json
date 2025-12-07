@@ -14,7 +14,7 @@
     "identity"
   ],
   "oauth2": {
-    "client_id": "YOUR_CLIENT_ID.apps.googleusercontent.com",
+    "client_id": "655545319264-330sc2147genca10v3pa9vdv5panpnpm.apps.googleusercontent.com",
     "scopes": ["openid", "email", "profile"]
   },
   "chrome_url_overrides": {
