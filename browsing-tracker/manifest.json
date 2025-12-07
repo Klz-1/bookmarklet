@@ -2,15 +2,24 @@
   "manifest_version": 3,
   "name": "Browsing History Tracker",
   "description": "Track your browsing history with time spent, engagement metrics, and meaningful visualizations",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "permissions": [
     "storage",
     "alarms",
     "tabs",
     "history",
     "bookmarks",
-    "idle"
+    "idle",
+    "topSites",
+    "identity"
   ],
+  "oauth2": {
+    "client_id": "YOUR_CLIENT_ID.apps.googleusercontent.com",
+    "scopes": ["openid", "email", "profile"]
+  },
+  "chrome_url_overrides": {
+    "newtab": "src/newtab/index.html"
+  },
   "action": {
     "default_popup": "src/popup/index.html",
     "default_icon": {

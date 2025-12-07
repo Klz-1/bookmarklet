@@ -14,6 +14,7 @@ export interface PageVisit {
   duration: number // seconds spent on page
   sessionId: string
   isBookmarked: boolean
+  syncedAt?: Date // When synced to OneSpace
 }
 
 /**
@@ -33,6 +34,20 @@ export interface TwitterBookmark {
   retweets?: string
   replies?: string
   scrapedAt: Date
+  syncedAt?: Date // When synced to OneSpace
+}
+
+/**
+ * Sync queue item for offline-first sync
+ */
+export interface SyncQueueItem {
+  id?: number
+  type: 'visit' | 'twitter_bookmark'
+  itemId: number // Reference to visits or twitterBookmarks
+  createdAt: Date
+  attempts: number
+  lastAttemptAt?: Date
+  error?: string
 }
 
 /**
@@ -53,6 +68,7 @@ export interface DailyStats {
 class BrowsingDatabase extends Dexie {
   visits!: Table<PageVisit, number>
   twitterBookmarks!: Table<TwitterBookmark, number>
+  syncQueue!: Table<SyncQueueItem, number>
 
   constructor() {
     super('BrowsingTrackerDB')
@@ -66,6 +82,13 @@ class BrowsingDatabase extends Dexie {
     this.version(2).stores({
       visits: '++id, url, normalizedUrl, domain, visitedAt, sessionId, isBookmarked',
       twitterBookmarks: '++id, tweetId, authorHandle, timestamp, scrapedAt',
+    })
+
+    // Schema version 3 - add sync queue
+    this.version(3).stores({
+      visits: '++id, url, normalizedUrl, domain, visitedAt, sessionId, isBookmarked, syncedAt',
+      twitterBookmarks: '++id, tweetId, authorHandle, timestamp, scrapedAt, syncedAt',
+      syncQueue: '++id, type, itemId, createdAt, attempts',
     })
   }
 
@@ -366,6 +389,109 @@ class BrowsingDatabase extends Dexie {
    */
   async clearTwitterBookmarks(): Promise<void> {
     await this.twitterBookmarks.clear()
+  }
+
+  // Sync Queue Methods
+
+  /**
+   * Add item to sync queue
+   */
+  async addToSyncQueue(type: 'visit' | 'twitter_bookmark', itemId: number): Promise<number> {
+    // Check if already in queue
+    const existing = await this.syncQueue
+      .where({ type, itemId })
+      .first()
+
+    if (existing) {
+      return existing.id!
+    }
+
+    return this.syncQueue.add({
+      type,
+      itemId,
+      createdAt: new Date(),
+      attempts: 0,
+    })
+  }
+
+  /**
+   * Get pending sync items (max attempts < 5)
+   */
+  async getPendingSyncItems(limit = 50): Promise<SyncQueueItem[]> {
+    return this.syncQueue
+      .where('attempts')
+      .below(5)
+      .limit(limit)
+      .toArray()
+  }
+
+  /**
+   * Get sync queue count
+   */
+  async getSyncQueueCount(): Promise<number> {
+    return this.syncQueue.where('attempts').below(5).count()
+  }
+
+  /**
+   * Update sync item after attempt
+   */
+  async updateSyncAttempt(id: number, error?: string): Promise<void> {
+    const item = await this.syncQueue.get(id)
+    if (item) {
+      await this.syncQueue.update(id, {
+        attempts: item.attempts + 1,
+        lastAttemptAt: new Date(),
+        error,
+      })
+    }
+  }
+
+  /**
+   * Remove item from sync queue (after successful sync)
+   */
+  async removeFromSyncQueue(id: number): Promise<void> {
+    await this.syncQueue.delete(id)
+  }
+
+  /**
+   * Mark visit as synced
+   */
+  async markVisitSynced(id: number): Promise<void> {
+    await this.visits.update(id, { syncedAt: new Date() })
+  }
+
+  /**
+   * Mark Twitter bookmark as synced
+   */
+  async markTwitterBookmarkSynced(id: number): Promise<void> {
+    await this.twitterBookmarks.update(id, { syncedAt: new Date() })
+  }
+
+  /**
+   * Get unsynced visits
+   */
+  async getUnsyncedVisits(limit = 100): Promise<PageVisit[]> {
+    return this.visits
+      .filter(v => !v.syncedAt)
+      .limit(limit)
+      .toArray()
+  }
+
+  /**
+   * Get unsynced Twitter bookmarks
+   */
+  async getUnsyncedTwitterBookmarks(limit = 100): Promise<TwitterBookmark[]> {
+    return this.twitterBookmarks
+      .filter(b => !b.syncedAt)
+      .limit(limit)
+      .toArray()
+  }
+
+  /**
+   * Clear sync queue
+   */
+  async clearSyncQueue(): Promise<void> {
+    await this.syncQueue.clear()
   }
 }
 

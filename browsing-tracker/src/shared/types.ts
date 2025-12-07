@@ -74,3 +74,47 @@ export const DEFAULT_SETTINGS: Settings = {
   retentionDays: 90,
   darkMode: 'system',
 }
+
+/**
+ * Sync configuration
+ */
+export interface SyncConfig {
+  enabled: boolean
+  autoSyncTwitter: boolean
+  autoSyncVisits: boolean
+  syncIntervalMinutes: number // 5, 10, 15
+  lastSyncAt: string | null
+  oneSpaceUrl: string
+}
+
+export const DEFAULT_SYNC_CONFIG: SyncConfig = {
+  enabled: false,
+  autoSyncTwitter: true,
+  autoSyncVisits: false,
+  syncIntervalMinutes: 15,
+  lastSyncAt: null,
+  oneSpaceUrl: 'https://onebox-yshprffwnq-el.a.run.app', // Default Onebox URL
+}
+
+/**
+ * Sync queue item
+ */
+export interface SyncQueueItem {
+  id?: number
+  type: 'visit' | 'twitter_bookmark'
+  data: Record<string, unknown>
+  createdAt: Date
+  attempts: number
+  lastAttemptAt?: Date
+  error?: string
+}
+
+/**
+ * Sync status
+ */
+export interface SyncStatus {
+  isSyncing: boolean
+  lastSyncAt: string | null
+  pendingCount: number
+  lastError: string | null
+}
